@@ -1,4 +1,5 @@
 import json
+import hashlib
 import unittest
 from pathlib import Path
 
@@ -112,6 +113,18 @@ class FeatureEngineeringTests(unittest.TestCase):
 
 
 class ArtifactTests(unittest.TestCase):
+    def test_inference_bundle_matches_published_model_and_forecast(self):
+        root = Path(__file__).resolve().parents[1]
+        read = lambda name: json.loads((root / name).read_text(encoding="utf-8"))
+        bundle = read("singapore_inference.json")
+        base = [read("singapore_predictions.json"), read("singapore_metadata.json")]
+        encoded = json.dumps(base, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        self.assertEqual(bundle["base_hash"], hashlib.sha256(encoded.encode()).hexdigest())
+        self.assertEqual(bundle["model_sha256"], hashlib.sha256((root / "singapore_model.pkl").read_bytes()).hexdigest())
+        self.assertEqual(bundle["features"], FEATURES)
+        self.assertEqual(len(bundle["rows"]), 22)
+        self.assertEqual({row["DriverCode"] for row in bundle["rows"]}, set(PROJECTED_GRID))
+
     def test_exported_probabilities_are_complete_and_normalized(self):
         path = Path(__file__).resolve().parents[1] / "singapore_predictions.json"
         predictions = json.loads(path.read_text(encoding="utf-8"))

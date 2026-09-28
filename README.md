@@ -22,8 +22,8 @@ Singapore history and the latest Azerbaijan results must load before publication
 Historical measurements evaluate completed races, not the upcoming Singapore GP.
 
 The entry list is projected from the latest 2026 lineup. The forecast does not
-claim a confirmed Singapore entry list or qualifying grid. Update the roster if
-official entries change and regenerate after qualifying.
+claim a confirmed Singapore entry list or qualifying grid. Update and validate
+the roster if official entries change before automatic qualifying inference.
 
 ## Run
 
@@ -48,14 +48,28 @@ are the published snapshot; tests validate them along with feature behavior.
 ## Qualifying grid
 
 Before qualifying, projected positions use each driver's last three recorded
-grids. After qualifying, copy `qualifying_grid.example.json` to
-`qualifying_grid.json`, supply official positions, and retrain.
+grids. ChicaneAI now uses `singapore_inference.json` and the saved model to
+recalculate automatically after the official Grand Prix qualifying archive is
+complete and the full classification is published. This replaces only the
+projected grid feature; other pre-race inputs remain frozen. The app preserves
+both forecast stages and stops generating updates at race start.
+
+Qualifying order can differ from the final starting grid after penalties.
+Q1/Q2/Q3 times are not model features. Improved accuracy must be measured over
+future races; it is not guaranteed by adding qualifying positions.
+
+For an existing root snapshot, `python train_singapore.py --export-inference-only`
+reconstructs frozen inputs from the original cache, verifies exact probability
+parity and exports the bundle without retraining. Future training exports it
+automatically. In Docker, mount the root snapshot at `/app` and set
+`OUTPUT_DIR=/app` for this command; normal training exports to `artifacts/`.
 
 ## Outputs
 
 - `singapore_predictions.json`: ranked driver win probabilities.
 - `singapore_metadata.json`: race, data cutoff, features and measured backtests.
 - `singapore_model.pkl`: fitted model for reproducibility.
+- `singapore_inference.json`: frozen inputs and model/baseline checksums for post-qualifying inference.
 
 The September 28, 2026 export uses 1,748 driver results from 86 races, through
 the 2026 Azerbaijan GP. The 2026 walk-forward check covers 15 races: the winner

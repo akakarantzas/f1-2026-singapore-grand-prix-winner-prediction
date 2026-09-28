@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import warnings
 from datetime import datetime, timezone
@@ -10,6 +11,7 @@ import fastf1
 import joblib
 import numpy as np
 import pandas as pd
+import sklearn
 from sklearn import set_config
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.ensemble import HistGradientBoostingClassifier
@@ -251,9 +253,11 @@ def validate_training_race(year: int, gp: str, race_start, now=None) -> None:
         raise ValueError("The target race cannot be a training input")
 
 
-def load_results() -> pd.DataFrame:
+def load_results(*, offline=False) -> pd.DataFrame:
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     fastf1.Cache.enable_cache(str(CACHE_DIR))
+    if offline:
+        fastf1.Cache.offline_mode(True)
     rows = []
 
     for race_order, (year, gp) in enumerate(RACES_TO_LOAD):
@@ -637,6 +641,43 @@ def run_walk_forward_backtest(
     }
 
 
+def export_inference(pred, predictions, metadata):
+    """Freeze pre-race inputs so qualifying updates change only GridPosition."""
+    base = json.dumps([predictions, metadata], sort_keys=True, separators=(",", ":"), allow_nan=False)
+    bundle = {
+        "schema_version": 1,
+        "base_hash": hashlib.sha256(base.encode()).hexdigest(),
+        "model_sha256": hashlib.sha256(MODEL_PATH.read_bytes()).hexdigest(),
+        "sklearn_version": sklearn.__version__,
+        "features": FEATURES,
+        "circuit_win_rate_feature": "SingaporeWinRate",
+        "rows": pred[["driver", *FEATURES]].to_dict(orient="records"),
+    }
+    (OUTPUT_DIR / "singapore_inference.json").write_text(json.dumps(bundle, indent=2, allow_nan=False), encoding="utf-8")
+
+
+def export_existing_inference():
+    """Reconstruct from cached training inputs without retraining or replacing forecasts."""
+    data = engineer_features(load_results(offline=True))
+    metadata = json.loads(METADATA_PATH.read_text(encoding="utf-8"))
+    predictions = json.loads(PREDICTIONS_PATH.read_text(encoding="utf-8"))
+    if metadata["prediction_input"]["grid_source"] != "projected_grid":
+        raise ValueError("Existing export requires the original pre-qualifying forecast")
+    if data[["Year", "GrandPrix"]].drop_duplicates().shape[0] != metadata["training_races_loaded"]:
+        raise ValueError("Cached training races differ from the original training run")
+    pred = build_prediction_rows(data, build_projected_grid(data))
+    model = joblib.load(MODEL_PATH)
+    config = metadata["prediction_postprocess"]
+    pred["probability"] = apply_probability_postprocess(pred, model.predict_proba(pred[FEATURES])[:, 1],
+                                                       config["model_weight"], config["floor_before_normalization"])
+    reproduced = [{"driver": row["driver"], "team": row["TeamName"], "probability": round(float(row["probability"]), 4)}
+                  for _, row in pred.sort_values("probability", ascending=False).iterrows()]
+    if reproduced != predictions:
+        raise ValueError("Frozen inputs do not reproduce the published forecast")
+    export_inference(pred, predictions, metadata)
+    print("Exported frozen inference features; all published probabilities reproduced exactly.")
+
+
 def main() -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     data = engineer_features(load_results())
@@ -716,6 +757,7 @@ def main() -> None:
     joblib.dump(model, MODEL_PATH)
     PREDICTIONS_PATH.write_text(json.dumps(predictions, indent=2), encoding="utf-8")
     METADATA_PATH.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+    export_inference(pred, predictions, metadata)
 
     print(json.dumps(metadata, indent=2))
     for i, item in enumerate(predictions, 1):
@@ -723,4 +765,8 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--export-inference-only", action="store_true")
+    args = parser.parse_args()
+    export_existing_inference() if args.export_inference_only else main()

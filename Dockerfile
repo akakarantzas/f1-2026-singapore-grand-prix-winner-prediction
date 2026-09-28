@@ -12,7 +12,7 @@ RUN pip install --no-cache-dir --disable-pip-version-check -r requirements.lock.
 ENV OMP_NUM_THREADS=2 \
     OPENBLAS_NUM_THREADS=2
 
-COPY train_singapore.py qualifying_grid.example.json singapore_predictions.json ./
+COPY train_singapore.py qualifying_grid.example.json singapore_predictions.json singapore_metadata.json singapore_model.pkl singapore_inference.json ./
 COPY tests ./tests
 
 CMD ["python", "train_singapore.py"]
