@@ -14,5 +14,6 @@ ENV OMP_NUM_THREADS=2 \
 
 COPY train_singapore.py qualifying_grid.example.json singapore_predictions.json singapore_metadata.json singapore_model.pkl singapore_inference.json ./
 COPY tests ./tests
+COPY evaluation ./evaluation
 
 CMD ["python", "train_singapore.py"]
