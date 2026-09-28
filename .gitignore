@@ -1,0 +1,7 @@
+cache/
+qualifying_grid.json
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+artifacts/

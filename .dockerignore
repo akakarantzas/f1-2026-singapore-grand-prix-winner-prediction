@@ -1,0 +1,8 @@
+.git
+cache
+artifacts
+__pycache__
+*.py[cod]
+.venv
+venv
+singapore_model.pkl

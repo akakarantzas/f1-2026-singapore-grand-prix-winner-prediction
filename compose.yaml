@@ -1,0 +1,6 @@
+services:
+  train:
+    build: .
+    volumes:
+      - ./cache:/app/cache
+      - ./artifacts:/app/artifacts
